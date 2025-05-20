@@ -2,9 +2,29 @@ local frame = CreateFrame("Frame")
 frame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
 frame:RegisterEvent("LOOT_OPENED")
 
+SLASH_GAMBA1 = "/gamba"
+SlashCmdList["GAMBA"] = function(msg)
+    msg = msg:lower()
+    if msg == "toggle" then
+        GambaSettings = GambaSettings or {}
+        GambaSettings.partyMessages = not GambaSettings.partyMessages
+        print("[Gamba] Party messages are now " .. (GambaSettings.partyMessages and "enabled" or "disabled"))
+    elseif msg == "stats" or msg == "gambastats" then
+        print(string.format("💰 [Gamba] Session net: %.2fg", sessionProfit / 10000))
+    else
+        print("[Gamba] Available commands:")
+        print("  /gamba toggle       → Enable/disable party messages")
+        print("  /gamba stats        → Show current session profit")
+    end
+end
+
+-- Defaults
+GambaSettings = GambaSettings or { partyMessages = true }
+
 local disenchanting = false
 local disenchantedItem = nil
 local itemPrice = 0
+local sessionProfit = 0
 
 local function SafeGetAuctionatorPrice(itemLink)
     if not (Auctionator and Auctionator.API and Auctionator.API.v1 and Auctionator.API.v1.GetAuctionPriceByItemLink) then
@@ -26,12 +46,17 @@ hooksecurefunc(C_Container, "UseContainerItem", function(bag, slot)
     if itemLink then
         disenchantedItem = itemLink
         itemPrice = SafeGetAuctionatorPrice(itemLink)
-        print("[DE Debug] Preparing to disenchant:", itemLink, "→", itemPrice / 10000 .. "g")
+        -- print("[DE Debug] Preparing to disenchant:", itemLink, "→", itemPrice / 10000 .. "g")
     end
 end)
 
 local function PrintToPartyAndSelf(msg)
     print("[DE Reporter] " .. msg)
+
+    if not GambaSettings.partyMessages then
+        return
+    end
+
     if IsInGroup(LE_PARTY_CATEGORY_INSTANCE) then
         SendChatMessage(msg, "INSTANCE_CHAT")
     elseif IsInRaid() then
@@ -44,7 +69,7 @@ end
 frame:SetScript("OnEvent", function(self, event, ...)
     if event == "UNIT_SPELLCAST_SUCCEEDED" then
         local unit, _, spellID = ...
-        if unit == "player" and spellID == 13262 then -- Disenchant
+        if unit == "player" and spellID == 13262 then
             disenchanting = true
         end
 
@@ -60,6 +85,8 @@ frame:SetScript("OnEvent", function(self, event, ...)
         end
 
         local profit = totalMatValue - itemPrice
+        sessionProfit = sessionProfit + profit
+
         local itemName = disenchantedItem and (GetItemInfo(disenchantedItem) or "Item") or "Unknown"
 
         local summary = string.format(
@@ -72,12 +99,13 @@ frame:SetScript("OnEvent", function(self, event, ...)
 
         PrintToPartyAndSelf(summary)
 
-        -- 🎲 Gamba commentary
         local reaction
         if profit < -2 * itemPrice then
             reaction = "Oef, auch, what a loss."
-        elseif profit < 0 then
+        elseif profit < -0.5 * itemPrice then
             reaction = "Better luck next time... maybe"
+        elseif profit <= 0.5 * itemPrice and profit >= -0.5 * itemPrice then
+            reaction = "Gamba gamb-again."
         elseif profit <= 2 * itemPrice then
             reaction = "waaauww great gamba!"
         else
@@ -86,7 +114,9 @@ frame:SetScript("OnEvent", function(self, event, ...)
 
         PrintToPartyAndSelf(reaction)
 
-        -- Reset
+        local sessionLine = string.format("Total session net: %.2fg", sessionProfit / 10000)
+        PrintToPartyAndSelf(sessionLine)
+
         disenchantedItem = nil
         itemPrice = 0
     end
