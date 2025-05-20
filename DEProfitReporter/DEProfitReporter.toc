@@ -1,0 +1,5 @@
+## Interface: 11403
+## Title: DE Profit Reporter
+## Notes: Reports disenchant profit/loss using Auctionator
+## Version: 1.0
+DEProfitReporter.lua
